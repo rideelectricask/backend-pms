@@ -6,9 +6,9 @@ const path = require('path');
 const fs = require('fs');
 const { Workbook } = require('exceljs');
 const os = require('os');
-
 const mongoose = require('mongoose');
 const jwt = require('jsonwebtoken');
+
 const JWT_SECRET = process.env.JWT_MITRA_SECRET || 'pms-mitra-secret-key-2025';
 
 const BLITZ_LOGIN_URL = 'https://driver-api.rideblitz.id/panel/login';
@@ -31,8 +31,7 @@ const tokenCache = {};
 
 const getValidationDataBySenderName = async (senderName) => {
   const collection = mongoose.connection.db.collection('adminpanel_validations');
-  const validation = await collection.findOne({ sender_name: senderName });
-  return validation;
+  return collection.findOne({ sender_name: senderName });
 };
 
 const getValidationDataByMerchantOrderId = async (project, merchantOrderId) => {
@@ -49,75 +48,47 @@ const getBlitzCredentials = async (req) => {
       try {
         const token = authHeader.substring(7);
         const decoded = jwt.verify(token, JWT_SECRET);
-        console.log('[CREDS DEBUG] JWT decoded type     :', decoded.type);
-        console.log('[CREDS DEBUG] JWT blitz_username   :', decoded.blitz_username);
-        console.log('[CREDS DEBUG] JWT blitz_password   :', decoded.blitz_password ? '***exists***' : 'MISSING');
-
         if (decoded.blitz_username && decoded.blitz_password) {
-          console.log('[CREDS DEBUG] ✅ Using credentials from JWT:', decoded.blitz_username);
           return { username: decoded.blitz_username, password: decoded.blitz_password };
         }
-
         if (decoded.user_id) {
-          console.log('[CREDS DEBUG] ⚠️ JWT has user_id but missing blitz creds — querying DB by user_id:', decoded.user_id);
           const collection = mongoose.connection.db.collection('blitz_logins');
           const credential = await collection.findOne({ user_id: decoded.user_id, status: 'active' });
           if (credential) {
-            console.log('[CREDS DEBUG] ✅ Found credentials by user_id from DB:', credential.username);
             return { username: credential.username, password: credential.password };
           }
-          console.log('[CREDS DEBUG] ❌ No credentials found in DB for user_id:', decoded.user_id);
         }
-
-        console.log('[CREDS DEBUG] ⚠️ JWT valid but blitz_username/password and user_id missing — falling back to DB first active');
       } catch (e) {
-        console.log('[CREDS DEBUG] ❌ JWT verify failed:', e.message, '— falling back to DB');
+        console.log('[CREDS] JWT verify failed:', e.message);
       }
-    } else {
-      console.log('[CREDS DEBUG] ⚠️ Authorization header exists but not Bearer format');
     }
-  } else {
-    console.log('[CREDS DEBUG] ⚠️ No Authorization header — falling back to DB');
   }
 
   const collection = mongoose.connection.db.collection('blitz_logins');
   const credential = await collection.findOne({ status: 'active' });
   if (!credential) throw new Error('No active Blitz credentials found in database');
-  console.log('[CREDS DEBUG] 📦 Using credentials from DB (first active):', credential.username);
   return { username: credential.username, password: credential.password };
 };
 
 const loginToBlitz = async (username, password) => {
-  console.log(`🔐 Logging in to Blitz API with username: ${username}`);
   const response = await axios.post(BLITZ_LOGIN_URL, { username, password }, {
     headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
     timeout: 30000
   });
-
   if (response.data.result) {
-    const accessToken = response.data.data.access_token;
-    console.log('✅ Blitz API login successful');
-    return accessToken;
+    return response.data.data.access_token;
   }
-
   throw new Error('Login failed: ' + (response.data.message || 'Unknown error'));
 };
 
 const getAccessToken = async (req) => {
   const credentials = await getBlitzCredentials(req);
   const cacheKey = credentials.username;
-
   if (tokenCache[cacheKey] && tokenCache[cacheKey].expiry && Date.now() < tokenCache[cacheKey].expiry) {
     return tokenCache[cacheKey].token;
   }
-
   const accessToken = await loginToBlitz(credentials.username, credentials.password);
-
-  tokenCache[cacheKey] = {
-    token: accessToken,
-    expiry: Date.now() + (60 * 60 * 1000)
-  };
-
+  tokenCache[cacheKey] = { token: accessToken, expiry: Date.now() + 60 * 60 * 1000 };
   return accessToken;
 };
 
@@ -135,7 +106,6 @@ const createExcelFromOrders = async (orders) => {
   ];
 
   worksheet.addRow(headers);
-
   worksheet.getRow(1).eachCell((cell) => {
     cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF4472C4' } };
     cell.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 10, name: 'Calibri' };
@@ -144,46 +114,24 @@ const createExcelFromOrders = async (orders) => {
 
   for (const order of orders) {
     worksheet.addRow([
-      order.merchant_order_id || '',
-      order.weight || 0,
-      order.width || 0,
-      order.height || 0,
-      order.length || 0,
-      order.payment_type || 'non_cod',
-      order.cod_amount || 0,
-      order.sender_name || '',
-      order.sender_phone || '',
-      order.pickup_instructions || '',
-      order.consignee_name || '',
-      order.consignee_phone || '',
-      order.destination_district || '',
-      order.destination_city || '',
-      order.destination_province || '',
-      order.destination_postalcode || '',
-      order.destination_address || '',
-      order.dropoff_lat || 0,
-      order.dropoff_long || 0,
-      order.dropoff_instructions || '',
-      order.item_value || 0,
-      order.product_details || ''
+      order.merchant_order_id || '', order.weight || 0, order.width || 0,
+      order.height || 0, order.length || 0, order.payment_type || 'non_cod',
+      order.cod_amount || 0, order.sender_name || '', order.sender_phone || '',
+      order.pickup_instructions || '', order.consignee_name || '', order.consignee_phone || '',
+      order.destination_district || '', order.destination_city || '', order.destination_province || '',
+      order.destination_postalcode || '', order.destination_address || '',
+      order.dropoff_lat || 0, order.dropoff_long || 0, order.dropoff_instructions || '',
+      order.item_value || 0, order.product_details || ''
     ]);
   }
 
-  const tempDir = os.tmpdir();
-  const tempFile = path.join(tempDir, `blitz_upload_${Date.now()}.xlsx`);
+  const tempFile = path.join(os.tmpdir(), `blitz_upload_${Date.now()}.xlsx`);
   await workbook.xlsx.writeFile(tempFile);
-
-  console.log(`✅ Excel file created: ${tempFile}`);
-  console.log(`   Size: ${fs.statSync(tempFile).size} bytes`);
-
   return tempFile;
 };
 
 const runAutomationScript = async (excelFilePath, business, city, serviceType, hubId, blitzUsername, blitzPassword) => {
   return new Promise((resolve, reject) => {
-    console.log(`🤖 Running automation.py with username: ${blitzUsername}`);
-    console.log(`   business=${business}, city=${city}, service_type=${serviceType}, hub_id=${hubId}`);
-
     if (!fs.existsSync(AUTOMATION_SCRIPT_PATH)) {
       return reject(new Error(`automation.py not found at: ${AUTOMATION_SCRIPT_PATH}`));
     }
@@ -207,32 +155,16 @@ const runAutomationScript = async (excelFilePath, business, city, serviceType, h
     let outputData = '';
     let errorData = '';
 
-    pythonProcess.stdout.on('data', (data) => {
-      const output = data.toString();
-      outputData += output;
-      console.log(output.trim());
-    });
-
-    pythonProcess.stderr.on('data', (data) => {
-      errorData += data.toString();
-      console.error(data.toString().trim());
-    });
+    pythonProcess.stdout.on('data', (data) => { outputData += data.toString(); console.log(data.toString().trim()); });
+    pythonProcess.stderr.on('data', (data) => { errorData += data.toString(); console.error(data.toString().trim()); });
 
     pythonProcess.on('close', (code) => {
       if (fs.existsSync(excelFilePath)) {
-        try {
-          fs.unlinkSync(excelFilePath);
-          console.log(`🗑️ Temp file cleaned: ${excelFilePath}`);
-        } catch (err) {
-          console.warn(`⚠️ Failed to cleanup: ${err.message}`);
-        }
+        try { fs.unlinkSync(excelFilePath); } catch (err) { console.warn(`Cleanup failed: ${err.message}`); }
       }
-
       if (code === 0) {
-        console.log('✅ Automation completed successfully');
         resolve({ success: true, output: outputData });
       } else {
-        console.error(`❌ Automation failed with code ${code}`);
         reject(new Error(`Automation failed: ${errorData || 'Unknown error'}`));
       }
     });
@@ -247,8 +179,7 @@ const searchSingleOrderInBlitz = async (merchantOrderId, accessToken) => {
   try {
     const response = await axios.get(BLITZ_ORDERS_SEARCH_URL, {
       params: {
-        sort: 'created_at', dir: '-1', page: 1,
-        instant_type: 'non-instant',
+        sort: 'created_at', dir: '-1', page: 1, instant_type: 'non-instant',
         start_date: '1970-01-01+07:00:00',
         end_date: new Date().toISOString().split('T')[0] + '+23:59:59',
         q: merchantOrderId, limit: 50,
@@ -260,10 +191,7 @@ const searchSingleOrderInBlitz = async (merchantOrderId, accessToken) => {
     });
 
     if (response.data.results && response.data.results.length > 0) {
-      const exactMatch = response.data.results.find(
-        (r) => r.merchant_order_id === merchantOrderId
-      );
-      return exactMatch || null;
+      return response.data.results.find((r) => r.merchant_order_id === merchantOrderId) || null;
     }
     return null;
   } catch {
@@ -272,36 +200,20 @@ const searchSingleOrderInBlitz = async (merchantOrderId, accessToken) => {
 };
 
 const checkSingleOrderInBlitz = async (merchantOrderId, accessToken) => {
-  const order = await searchSingleOrderInBlitz(merchantOrderId, accessToken);
-  return order !== null;
+  return (await searchSingleOrderInBlitz(merchantOrderId, accessToken)) !== null;
 };
 
 const waitUntilOrdersAppearInBlitz = async (merchantOrderIds, accessToken, maxRetries = 5, intervalMs = 5000) => {
-  console.log(`\n⏳ Waiting for ${merchantOrderIds.length} uploaded order(s) to appear in Blitz...`);
+  console.log(`Waiting for ${merchantOrderIds.length} order(s) to appear in Blitz...`);
 
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
-    console.log(`   Re-check attempt ${attempt}/${maxRetries}...`);
-
     const stillMissing = [];
     for (const merchantOrderId of merchantOrderIds) {
       const found = await checkSingleOrderInBlitz(merchantOrderId, accessToken);
-      if (!found) {
-        stillMissing.push(merchantOrderId);
-      } else {
-        console.log(`   ✅ ${merchantOrderId} now visible in Blitz`);
-      }
+      if (!found) stillMissing.push(merchantOrderId);
     }
-
-    if (stillMissing.length === 0) {
-      console.log(`✅ All uploaded orders are now visible in Blitz`);
-      return { success: true, missing: [] };
-    }
-
-    console.log(`   ⏳ Still missing ${stillMissing.length} order(s): ${stillMissing.join(', ')}`);
-
-    if (attempt < maxRetries) {
-      await new Promise(resolve => setTimeout(resolve, intervalMs));
-    }
+    if (stillMissing.length === 0) return { success: true, missing: [] };
+    if (attempt < maxRetries) await new Promise(resolve => setTimeout(resolve, intervalMs));
   }
 
   const finalMissing = [];
@@ -309,23 +221,15 @@ const waitUntilOrdersAppearInBlitz = async (merchantOrderIds, accessToken, maxRe
     const found = await checkSingleOrderInBlitz(merchantOrderId, accessToken);
     if (!found) finalMissing.push(merchantOrderId);
   }
-
   return { success: finalMissing.length === 0, missing: finalMissing };
 };
 
 router.get('/token', async (req, res) => {
   try {
     const credentials = await getBlitzCredentials(req);
-    const cacheKey = credentials.username;
-
-    delete tokenCache[cacheKey];
-
+    delete tokenCache[credentials.username];
     const accessToken = await loginToBlitz(credentials.username, credentials.password);
-    tokenCache[cacheKey] = {
-      token: accessToken,
-      expiry: Date.now() + (60 * 60 * 1000)
-    };
-
+    tokenCache[credentials.username] = { token: accessToken, expiry: Date.now() + 60 * 60 * 1000 };
     res.json({ success: true, token: accessToken });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
@@ -336,91 +240,67 @@ router.post('/add-to-existing-batch', async (req, res) => {
   try {
     const { orders, batchId, hubId, business, city, serviceType } = req.body;
 
-    console.log(`\n${'='.repeat(70)}`);
-    console.log(`🔄 ADD TO EXISTING BATCH: ${batchId}`);
-    console.log(`${'='.repeat(70)}`);
-    console.log(`Orders: ${orders.length}, Hub: ${hubId}, Business: ${business}, City: ${city}, ServiceType: ${serviceType}`);
+    console.log(`ADD TO EXISTING BATCH: ${batchId}, ${orders.length} orders`);
 
     const credentials = await getBlitzCredentials(req);
-    console.log(`🔑 Using credentials for: ${credentials.username}`);
-
     const accessToken = await loginToBlitz(credentials.username, credentials.password);
-
-    tokenCache[credentials.username] = {
-      token: accessToken,
-      expiry: Date.now() + (60 * 60 * 1000)
-    };
+    tokenCache[credentials.username] = { token: accessToken, expiry: Date.now() + 60 * 60 * 1000 };
 
     const merchantOrderIds = orders.map(o => o.merchant_order_id);
 
-    console.log(`\n🔍 Step 1: Checking which orders exist in Blitz...`);
-    const existingInBlitz = [];
-    const notInBlitz = [];
+    console.log(`Step 1: Uploading all ${orders.length} orders to AdminPanel first...`);
+    const excelFile = await createExcelFromOrders(orders);
 
+    try {
+      await runAutomationScript(
+        excelFile,
+        business || 12,
+        city || 9,
+        serviceType || 2,
+        hubId,
+        credentials.username,
+        credentials.password
+      );
+    } catch (uploadError) {
+      console.error('Upload failed:', uploadError.message);
+      return res.status(500).json({ success: false, message: `Upload failed: ${uploadError.message}` });
+    }
+
+    console.log(`Step 2: Waiting for orders to appear in Blitz...`);
+    const recheckResult = await waitUntilOrdersAppearInBlitz(merchantOrderIds, accessToken, 6, 6000);
+
+    const availableOrderIds = [];
     for (const merchantOrderId of merchantOrderIds) {
       const found = await checkSingleOrderInBlitz(merchantOrderId, accessToken);
-      if (found) {
-        existingInBlitz.push(merchantOrderId);
-        console.log(`   ✅ ${merchantOrderId} exists in Blitz`);
-      } else {
-        notInBlitz.push(merchantOrderId);
-        console.log(`   ⬆️  ${merchantOrderId} needs upload`);
-      }
+      if (found) availableOrderIds.push(merchantOrderId);
     }
 
-    if (notInBlitz.length > 0) {
-      console.log(`\n📤 Step 2: Uploading ${notInBlitz.length} missing orders to AdminPanel...`);
-      const ordersToUpload = orders.filter(o => notInBlitz.includes(o.merchant_order_id));
-      const excelFile = await createExcelFromOrders(ordersToUpload);
-
-      try {
-        await runAutomationScript(
-          excelFile,
-          business || 12,
-          city || 9,
-          serviceType || 2,
-          hubId,
-          credentials.username,
-          credentials.password
-        );
-        console.log(`✅ Upload automation completed`);
-      } catch (uploadError) {
-        console.error('❌ Upload failed:', uploadError.message);
-        return res.status(500).json({ success: false, message: `Upload failed: ${uploadError.message}` });
-      }
-
-      const recheckResult = await waitUntilOrdersAppearInBlitz(notInBlitz, accessToken, 5, 6000);
-
-      if (!recheckResult.success) {
-        console.error(`❌ Orders still not found in Blitz after upload and retries: ${recheckResult.missing.join(', ')}`);
-        return res.status(500).json({
-          success: false,
-          message: `Upload ke AdminPanel berhasil, namun ${recheckResult.missing.length} order masih belum muncul di Blitz setelah beberapa percobaan pengecekan. Silakan coba assign kembali beberapa saat lagi.`,
-          missingOrders: recheckResult.missing
-        });
-      }
-    } else {
-      console.log(`\n✅ Step 2: All orders already exist in Blitz, skipping upload`);
+    if (availableOrderIds.length === 0) {
+      return res.status(500).json({
+        success: false,
+        message: `Upload ke AdminPanel berhasil, namun order belum muncul di Blitz. Silakan coba assign kembali.`,
+        missingOrders: merchantOrderIds
+      });
     }
 
-    console.log(`\n🔍 Step 3: Validating orders for batch ${batchId}...`);
+    console.log(`Step 3: Validating ${availableOrderIds.length} orders for batch ${batchId}...`);
     const validateResponse = await axios.post(
       BLITZ_VALIDATE_BATCH_URL,
-      { batchId: parseInt(batchId), hub_id: hubId, sequence_type: 1, merchant_order_ids: merchantOrderIds },
+      { batchId: parseInt(batchId), hub_id: hubId, sequence_type: 1, merchant_order_ids: availableOrderIds },
       {
         headers: { 'Accept': 'application/json', 'Authorization': accessToken, 'Content-Type': 'application/json', 'bt': '2' },
         timeout: 30000
       }
     );
 
-    console.log(`✅ Validation response: result=${validateResponse.data.result}`);
+    console.log(`Validation result: ${validateResponse.data.result}`);
 
-    console.log(`\n📦 Step 4: Adding orders to batch ${batchId}...`);
+    console.log(`Step 4: Adding ${availableOrderIds.length} orders to batch ${batchId}...`);
     let addResponse;
     try {
       addResponse = await axios.post(
         BLITZ_ADD_BATCH_URL,
-        { sequence_type: 1, batch_id: parseInt(batchId), merchant_order_ids: merchantOrderIds, hub_id: hubId },
+        { sequence_type: 1, batch_id: parseInt(batchId), merchant_order_ids: availableOrderIds, hub_id: hubId },
         {
           headers: { 'Accept': 'application/json', 'Authorization': accessToken, 'Content-Type': 'application/json', 'bt': '2' },
           timeout: 30000
@@ -441,19 +321,20 @@ router.post('/add-to-existing-batch', async (req, res) => {
       return res.status(400).json({ success: false, message: errMsg });
     }
 
-    console.log(`\n✅ Successfully added ${merchantOrderIds.length} orders to batch ${batchId}`);
-    console.log(`${'='.repeat(70)}\n`);
+    const notAvailable = merchantOrderIds.filter(id => !availableOrderIds.includes(id));
 
     res.json({
       success: true,
-      batchId: batchId,
-      uploadedCount: notInBlitz.length,
-      addedCount: merchantOrderIds.length,
+      batchId,
+      uploadedCount: orders.length,
+      addedCount: availableOrderIds.length,
+      skippedCount: notAvailable.length,
+      skippedOrders: notAvailable,
       data: addResponse.data.data
     });
 
   } catch (error) {
-    console.error('❌ Add to existing batch error:', error.message);
+    console.error('Add to existing batch error:', error.message);
     res.status(500).json({ success: false, message: error.message });
   }
 });
@@ -466,10 +347,7 @@ router.post('/search-orders', async (req, res) => {
       return res.status(400).json({ success: false, message: 'merchantOrderIds array is required' });
     }
 
-    console.log(`🔍 Searching Blitz orders for ${merchantOrderIds.length} merchant order IDs`);
-
     const accessToken = await getAccessToken(req);
-
     const today = new Date();
     const startDate = '1970-01-01+07:00:00';
     const endDate = today.toISOString().split('T')[0] + '+23:59:59';
@@ -484,10 +362,8 @@ router.post('/search-orders', async (req, res) => {
         try {
           const response = await axios.get(BLITZ_ORDERS_SEARCH_URL, {
             params: {
-              sort: 'created_at', dir: '-1', page: 1,
-              instant_type: 'non-instant',
-              start_date: startDate, end_date: endDate,
-              q: merchantOrderId, limit: 50,
+              sort: 'created_at', dir: '-1', page: 1, instant_type: 'non-instant',
+              start_date: startDate, end_date: endDate, q: merchantOrderId, limit: 50,
               pickup_schedule_type: 'standard,scheduled,immediate',
               pickup_sla_model: 'pickup_slots,operational_hours'
             },
@@ -496,26 +372,17 @@ router.post('/search-orders', async (req, res) => {
           });
 
           if (response.data.results && response.data.results.length > 0) {
-            const exactMatch = response.data.results.find(
-              (r) => r.merchant_order_id === merchantOrderId
-            );
-
+            const exactMatch = response.data.results.find((r) => r.merchant_order_id === merchantOrderId);
             if (exactMatch) {
               results[merchantOrderId] = {
-                exists: true,
-                order_id: exactMatch.id,
-                awb_number: exactMatch.awb_number,
-                order_status: exactMatch.order_status,
-                batch_id: exactMatch.batch_id
+                exists: true, order_id: exactMatch.id, awb_number: exactMatch.awb_number,
+                order_status: exactMatch.order_status, batch_id: exactMatch.batch_id
               };
-              console.log(`   ✅ Found (exact): ${merchantOrderId} status=${exactMatch.order_status} batch=${exactMatch.batch_id}`);
             } else {
               results[merchantOrderId] = { exists: false };
-              console.log(`   ❌ Not found (no exact match): ${merchantOrderId}`);
             }
           } else {
             results[merchantOrderId] = { exists: false };
-            console.log(`   ❌ Not found: ${merchantOrderId}`);
           }
         } catch (error) {
           results[merchantOrderId] = { exists: false, error: error.message };
@@ -523,15 +390,12 @@ router.post('/search-orders', async (req, res) => {
       });
 
       await Promise.all(promises);
-
       if (i + batchSize < merchantOrderIds.length) {
         await new Promise(resolve => setTimeout(resolve, 500));
       }
     }
 
     const foundCount = Object.keys(results).filter(k => results[k]?.exists).length;
-    console.log(`✅ Found ${foundCount} orders in Blitz (exact match)`);
-
     res.json({ success: true, data: results, totalSearched: merchantOrderIds.length, totalFound: foundCount });
 
   } catch (error) {
@@ -550,10 +414,8 @@ router.get('/batch-details/:batchId', async (req, res) => {
     });
 
     if (response.data.result && response.data.data) {
-      console.log(`✅ Batch details retrieved for batch ${batchId}`);
       return res.json(response.data);
     }
-
     res.status(404).json({ result: false, message: 'Batch not found' });
 
   } catch (error) {
@@ -564,8 +426,6 @@ router.get('/batch-details/:batchId', async (req, res) => {
 router.get('/active-batch/:driverId', async (req, res) => {
   try {
     const { driverId } = req.params;
-    console.log(`🔍 Fetching active batch for driver ${driverId}...`);
-
     const accessToken = await getAccessToken(req);
 
     const today = new Date();
@@ -574,10 +434,10 @@ router.get('/active-batch/:driverId', async (req, res) => {
     sevenDaysAgo.setDate(today.getDate() - 7);
 
     const formatDate = (date) => {
-      const year = date.getFullYear();
-      const month = String(date.getMonth() + 1).padStart(2, '0');
-      const day = String(date.getDate()).padStart(2, '0');
-      return `${year}-${month}-${day}`;
+      const y = date.getFullYear();
+      const m = String(date.getMonth() + 1).padStart(2, '0');
+      const d = String(date.getDate()).padStart(2, '0');
+      return `${y}-${m}-${d}`;
     };
 
     const response = await axios.get(`${BLITZ_DRIVER_PERFORMANCE_URL}/${driverId}`, {
@@ -594,19 +454,14 @@ router.get('/active-batch/:driverId', async (req, res) => {
     }
 
     const batches = response.data.data.driver_batch_performance_list;
-
     if (!Array.isArray(batches) || batches.length === 0) {
       return res.json({ success: true, batchId: null });
     }
 
     const activeBatch = batches.find(batch => batch.assignment_status === 1);
-
-    if (!activeBatch) {
-      return res.json({ success: true, batchId: null });
-    }
+    if (!activeBatch) return res.json({ success: true, batchId: null });
 
     const batchId = activeBatch.id;
-
     const detailsResponse = await axios.get(`${BLITZ_BATCH_DETAILS_URL}/${batchId}`, {
       headers: { 'Accept': 'application/json', 'Authorization': accessToken, 'bt': '2' },
       timeout: 30000
@@ -614,12 +469,7 @@ router.get('/active-batch/:driverId', async (req, res) => {
 
     if (detailsResponse.data.result && detailsResponse.data.data) {
       const ordersCount = (detailsResponse.data.data.orders || []).length;
-
-      if (ordersCount === 0) {
-        return res.json({ success: true, batchId: null });
-      }
-
-      console.log(`✅ Active batch found: ${batchId} with ${ordersCount} orders`);
+      if (ordersCount === 0) return res.json({ success: true, batchId: null });
       return res.json({ success: true, batchId });
     }
 
@@ -633,8 +483,6 @@ router.get('/active-batch/:driverId', async (req, res) => {
 router.get('/driver-attendance/:driverPhone', async (req, res) => {
   try {
     const { driverPhone } = req.params;
-    console.log(`🔍 Fetching attendance for driver: ${driverPhone}`);
-
     const accessToken = await getAccessToken(req);
 
     const response = await axios.get(BLITZ_DRIVER_LIST_URL, {
@@ -650,7 +498,6 @@ router.get('/driver-attendance/:driverPhone', async (req, res) => {
     if (response.data.result && response.data.data?.driver_list_response?.length > 0) {
       const driverData = response.data.data.driver_list_response[0];
       const attendanceStatus = driverData.drivers?.attendance_status || 'offline';
-      console.log(`✅ Attendance: ${attendanceStatus}`);
       return res.json({ success: true, status: attendanceStatus });
     }
 
@@ -674,7 +521,6 @@ router.get('/driver-profile/:driverId', async (req, res) => {
     if (response.data.result) {
       return res.json({ success: true, data: response.data.data });
     }
-
     res.json({ success: false, message: 'Driver profile not found' });
 
   } catch (error) {
@@ -695,11 +541,8 @@ router.post('/nearby-drivers', async (req, res) => {
     });
 
     if (response.data.result) {
-      const drivers = response.data.data.driverList || [];
-      console.log(`✅ Found ${drivers.length} nearby drivers`);
       return res.json({ success: true, data: response.data.data });
     }
-
     res.json({ success: false, message: 'Failed to fetch nearby drivers' });
 
   } catch (error) {
@@ -713,8 +556,7 @@ router.post('/validate-batch-orders', async (req, res) => {
     const accessToken = await getAccessToken(req);
 
     const response = await axios.post(BLITZ_VALIDATE_BATCH_URL, {
-      sequence_type: sequenceType, batch_id: batchId,
-      merchant_order_ids: merchantOrderIds, hub_id: hubId
+      sequence_type: sequenceType, batch_id: batchId, merchant_order_ids: merchantOrderIds, hub_id: hubId
     }, {
       headers: { 'Accept': 'application/json', 'Authorization': accessToken, 'Content-Type': 'application/json', 'bt': '2' },
       timeout: 30000
@@ -734,24 +576,17 @@ router.post('/add-batch-orders', async (req, res) => {
 
     try {
       const response = await axios.post(BLITZ_ADD_BATCH_URL, {
-        sequence_type: sequenceType, batch_id: batchId,
-        merchant_order_ids: merchantOrderIds, hub_id: hubId
+        sequence_type: sequenceType, batch_id: batchId, merchant_order_ids: merchantOrderIds, hub_id: hubId
       }, {
         headers: { 'Accept': 'application/json', 'Authorization': accessToken, 'Content-Type': 'application/json', 'bt': '2' },
         timeout: 30000
       });
-
       res.json(response.data);
     } catch (axiosError) {
       const status = axiosError.response?.status;
       const errorData = axiosError.response?.data;
       const blitzMessage = errorData?.error?.message || errorData?.message || axiosError.message;
-
-      res.status(status || 500).json({
-        result: false,
-        message: blitzMessage || 'Failed to add batch orders',
-        blitz_error: errorData
-      });
+      res.status(status || 500).json({ result: false, message: blitzMessage, blitz_error: errorData });
     }
 
   } catch (error) {
@@ -764,50 +599,31 @@ router.post('/create-batch-with-driver', async (req, res) => {
     const { orders, driverId, driverName, driverPhone, business, city, serviceType, hubId, coordinates } = req.body;
 
     const credentials = await getBlitzCredentials(req);
-    console.log(`🔑 Using credentials for: ${credentials.username}`);
-
     const accessToken = await loginToBlitz(credentials.username, credentials.password);
-
-    tokenCache[credentials.username] = {
-      token: accessToken,
-      expiry: Date.now() + (60 * 60 * 1000)
-    };
+    tokenCache[credentials.username] = { token: accessToken, expiry: Date.now() + 60 * 60 * 1000 };
 
     const merchantOrderIds = orders.map(o => o.merchant_order_id);
 
-    const notInBlitz = [];
-    for (const merchantOrderId of merchantOrderIds) {
-      const found = await checkSingleOrderInBlitz(merchantOrderId, accessToken);
-      if (!found) notInBlitz.push(merchantOrderId);
+    console.log(`Uploading all ${orders.length} orders to AdminPanel...`);
+    const excelFile = await createExcelFromOrders(orders);
+
+    try {
+      await runAutomationScript(
+        excelFile, business || 12, city || 9, serviceType || 2, hubId,
+        credentials.username, credentials.password
+      );
+    } catch (uploadError) {
+      return res.status(500).json({ success: false, message: 'Failed to upload orders', error: uploadError.message });
     }
 
-    if (notInBlitz.length > 0) {
-      const ordersToUpload = orders.filter(order => notInBlitz.includes(order.merchant_order_id));
-      const excelFile = await createExcelFromOrders(ordersToUpload);
+    const recheckResult = await waitUntilOrdersAppearInBlitz(merchantOrderIds, accessToken, 5, 6000);
 
-      try {
-        await runAutomationScript(
-          excelFile,
-          business || 12,
-          city || 9,
-          serviceType || 2,
-          hubId,
-          credentials.username,
-          credentials.password
-        );
-      } catch (uploadError) {
-        return res.status(500).json({ success: false, message: 'Failed to upload missing orders', error: uploadError.message });
-      }
-
-      const recheckResult = await waitUntilOrdersAppearInBlitz(notInBlitz, accessToken, 5, 6000);
-
-      if (!recheckResult.success) {
-        return res.status(500).json({
-          success: false,
-          message: `Upload berhasil namun ${recheckResult.missing.length} order masih belum muncul di Blitz. Silakan coba assign kembali.`,
-          missingOrders: recheckResult.missing
-        });
-      }
+    if (!recheckResult.success) {
+      return res.status(500).json({
+        success: false,
+        message: `Upload berhasil namun ${recheckResult.missing.length} order masih belum muncul di Blitz.`,
+        missingOrders: recheckResult.missing
+      });
     }
 
     const validateResponse = await axios.post(BLITZ_VALIDATE_BATCH_URL, {
@@ -834,8 +650,7 @@ router.post('/create-batch-with-driver', async (req, res) => {
       });
     } catch (saveError) {
       const saveErrorData = saveError.response?.data;
-      const saveMessage = saveErrorData?.error?.message || saveErrorData?.message || saveError.message;
-      throw new Error(`Save batch failed: ${saveMessage}`);
+      throw new Error(`Save batch failed: ${saveErrorData?.error?.message || saveErrorData?.message || saveError.message}`);
     }
 
     if (!saveResponse.data.result) {
@@ -850,7 +665,7 @@ router.post('/create-batch-with-driver', async (req, res) => {
     });
 
     if (!generateResponse.data.result) {
-      console.warn(`⚠️ Generate returned false, continuing...`);
+      console.warn(`Generate returned false, continuing...`);
     }
 
     await new Promise(resolve => setTimeout(resolve, 2000));
@@ -871,8 +686,7 @@ router.post('/create-batch-with-driver', async (req, res) => {
       });
     } catch (assignError) {
       const assignErrorData = assignError.response?.data;
-      const assignMessage = assignErrorData?.error?.message || assignErrorData?.message || assignError.message;
-      throw new Error(`Driver assignment failed: ${assignMessage}`);
+      throw new Error(`Driver assignment failed: ${assignErrorData?.error?.message || assignErrorData?.message || assignError.message}`);
     }
 
     if (!assignResponse.data.result) {
@@ -880,9 +694,8 @@ router.post('/create-batch-with-driver', async (req, res) => {
     }
 
     res.json({
-      success: true,
-      batchId,
-      uploadedCount: notInBlitz.length,
+      success: true, batchId,
+      uploadedCount: orders.length,
       assignmentId: assignResponse.data.data.assignment_id,
       driverId: assignResponse.data.data.driver_id
     });
@@ -896,21 +709,15 @@ router.post('/remove-order-from-batch', async (req, res) => {
   try {
     const { batchId, merchantOrderId, orderId, project } = req.body;
 
-    console.log(`🔄 Removing order ${merchantOrderId} from batch ${batchId}...`);
-
     const validationData = await getValidationDataByMerchantOrderId(project, merchantOrderId);
     if (!validationData) {
       return res.status(400).json({
         success: false,
-        message: `Validation data not found for order ${merchantOrderId}. Sender name not registered in adminpanel_validations.`
+        message: `Validation data not found for order ${merchantOrderId}.`
       });
     }
 
     const hubId = validationData.business_hub;
-    const sequenceType = 1;
-
-    console.log(`📋 Using hub_id: ${hubId} from adminpanel_validations for sender: ${validationData.sender_name}`);
-
     const accessToken = await getAccessToken(req);
 
     const validateResponse = await axios.post(
@@ -925,10 +732,7 @@ router.post('/remove-order-from-batch', async (req, res) => {
     if (validateResponse.status !== 200) throw new Error('Validation failed');
 
     const removeResponse = await axios.post(BLITZ_REMOVE_ORDER_URL, {
-      sequence_type: sequenceType,
-      batch_id: batchId,
-      merchant_order_ids: [merchantOrderId],
-      hub_id: hubId
+      sequence_type: 1, batch_id: batchId, merchant_order_ids: [merchantOrderId], hub_id: hubId
     }, {
       headers: { 'Accept': 'application/json', 'Authorization': accessToken, 'Content-Type': 'application/json', 'bt': '2' },
       timeout: 30000
@@ -943,12 +747,9 @@ router.post('/remove-order-from-batch', async (req, res) => {
       { _id: objectId },
       {
         $set: {
-          assigned_to_driver_id: null,
-          assigned_to_driver_name: null,
-          assigned_to_driver_phone: null,
-          assigned_at: null,
-          assignment_status: 'unassigned',
-          batch_id: null
+          assigned_to_driver_id: null, assigned_to_driver_name: null,
+          assigned_to_driver_phone: null, assigned_at: null,
+          assignment_status: 'unassigned', batch_id: null
         }
       }
     );
@@ -964,14 +765,8 @@ router.post('/refresh-token', async (req, res) => {
   try {
     const credentials = await getBlitzCredentials(req);
     delete tokenCache[credentials.username];
-
     const accessToken = await loginToBlitz(credentials.username, credentials.password);
-
-    tokenCache[credentials.username] = {
-      token: accessToken,
-      expiry: Date.now() + (60 * 60 * 1000)
-    };
-
+    tokenCache[credentials.username] = { token: accessToken, expiry: Date.now() + 60 * 60 * 1000 };
     res.json({ success: true, message: 'Token refreshed successfully', expiresIn: '1 hour' });
   } catch (error) {
     res.status(500).json({ success: false, message: 'Failed to refresh token', error: error.message });
@@ -982,12 +777,7 @@ router.post('/clear-cache', async (req, res) => {
   try {
     const credentials = await getBlitzCredentials(req);
     const cacheKey = credentials.username;
-
-    if (tokenCache[cacheKey]) {
-      delete tokenCache[cacheKey];
-      console.log(`🗑️ Token cache cleared for username: ${cacheKey}`);
-    }
-
+    if (tokenCache[cacheKey]) delete tokenCache[cacheKey];
     res.json({ success: true, message: `Token cache cleared for ${cacheKey}` });
   } catch (error) {
     res.status(500).json({ success: false, message: 'Failed to clear cache', error: error.message });
