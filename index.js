@@ -32,9 +32,24 @@ const { initializeLarkTokens } = require("./services/larkTokenService");
 const app = express();
 const port = process.env.PORT || 5000;
 
-const WAHA_SERVICE_URL = process.env.WAHA_SERVICE_URL || "https://gallant-wonder-production-01e0.up.railway.app";
+const WAHA_SERVICE_URL = process.env.WAHA_SERVICE_URL || "https://waha-production-1839.up.railway.app";
 
-app.use(cors());
+// ✅ CORS - harus paling atas sebelum semua middleware dan routes
+app.use(cors({
+  origin: '*',
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'x-api-key'],
+  credentials: false
+}));
+
+// ✅ Handle preflight OPTIONS untuk semua routes
+app.options('*', cors({
+  origin: '*',
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'x-api-key'],
+  credentials: false
+}));
+
 app.use(helmet({
   contentSecurityPolicy: false,
   crossOriginEmbedderPolicy: false,
