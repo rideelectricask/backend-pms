@@ -1,6 +1,6 @@
 FROM node:18-bullseye
 
-# Install sistem dependencies + Python3 dari repo Debian (jauh lebih cepat dari build source)
+# Install sistem dependencies + Python3
 RUN apt-get update && apt-get install -y \
     python3 \
     python3-pip \
@@ -55,9 +55,11 @@ RUN wget -q -O /tmp/chrome.deb https://dl.google.com/linux/direct/google-chrome-
 
 WORKDIR /app
 
-# Install Node dependencies dulu (cache layer)
-COPY package*.json ./
-RUN npm ci --only=production
+# Copy hanya package.json (abaikan lock file yang tidak sinkron)
+COPY package.json ./
+
+# Gunakan npm install --omit=dev (bukan npm ci yang butuh lock file sinkron)
+RUN npm install --omit=dev
 
 # Install Python dependencies
 COPY requirements.txt ./
