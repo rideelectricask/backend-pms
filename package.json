@@ -1,1 +1,54 @@
-{"name":"backend-pms","version":"1.0.0","main":"index.js","scripts":{"start":"node index.js","dev":"nodemon index.js","test":"echo \"Error: no test specified\" && exit 1","install-python-deps":"pip install openpyxl","setup":"npm install && npm run install-python-deps","chart-test":"python utils/chart_generator.py test_data.json output.xlsx"},"keywords":[],"author":"","license":"ISC","description":"","dependencies":{"@heroicons/react":"^2.2.0","@material-tailwind/react":"^2.1.10","axios":"^1.13.2","bcryptjs":"^3.0.3","cloudinary":"^2.9.0","compression":"^1.8.0","cors":"^2.8.5","date-fns":"^4.1.0","dotenv":"^16.5.0","exceljs":"^4.4.0","express":"^5.1.0","express-rate-limit":"^8.0.1","file-saver":"^2.0.5","googleapis":"^171.4.0","helmet":"^8.1.0","http-proxy-middleware":"^3.0.5","jsonwebtoken":"^9.0.2","lodash":"^4.17.21","mongodb":"^6.17.0","mongoose":"^8.15.1","morgan":"^1.10.0","multer":"^2.0.2","node-cron":"^4.2.1","react-window":"^2.2.3","uuid":"^8.3.2","xlsx":"^0.18.5"},"devDependencies":{"nodemon":"^3.0.1"},"engines":{"node":">=16.0.0"},"pythonDependencies":{"openpyxl":">=3.0.0"}}
+{
+  "name": "backend-pms",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "nodemon index.js",
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "install-python-deps": "pip install openpyxl",
+    "setup": "npm install && npm run install-python-deps",
+    "chart-test": "python utils/chart_generator.py test_data.json output.xlsx"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "dependencies": {
+    "@heroicons/react": "^2.2.0",
+    "@material-tailwind/react": "^2.1.10",
+    "axios": "^1.13.2",
+    "bcryptjs": "^3.0.3",
+    "cloudinary": "^2.9.0",
+    "compression": "^1.8.0",
+    "cors": "^2.8.5",
+    "date-fns": "^4.1.0",
+    "dotenv": "^16.5.0",
+    "exceljs": "^4.4.0",
+    "express": "^4.21.2",
+    "express-rate-limit": "^8.0.1",
+    "file-saver": "^2.0.5",
+    "googleapis": "^171.4.0",
+    "helmet": "^8.1.0",
+    "http-proxy-middleware": "^3.0.5",
+    "jsonwebtoken": "^9.0.2",
+    "lodash": "^4.17.21",
+    "mongodb": "^6.17.0",
+    "mongoose": "^8.15.1",
+    "morgan": "^1.10.0",
+    "multer": "^2.0.2",
+    "node-cron": "^4.2.1",
+    "react-window": "^2.2.3",
+    "uuid": "^8.3.2",
+    "xlsx": "^0.18.5"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.1"
+  },
+  "engines": {
+    "node": ">=16.0.0"
+  },
+  "pythonDependencies": {
+    "openpyxl": ">=3.0.0"
+  }
+}
