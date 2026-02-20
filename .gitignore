@@ -1,0 +1,106 @@
+# Node.js
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+.npm
+.yarn-integrity
+
+# Environment variables
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Python virtual environments
+venv/
+env/
+ENV/
+myenv/
+.venv/
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Temporary files
+temp/
+tmp/
+*.tmp
+*.temp
+temp/*.json
+temp/*.xlsx
+
+# Excel files
+*.xlsx
+*.xls
+*.xlsm
+
+# Build outputs
+dist/
+build/
+out/
+coverage/
+.nyc_output/
+
+# IDEs and Editors
+.DS_Store
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.project
+.classpath
+.settings/
+*.sublime-workspace
+*.sublime-project
+
+# WhatsApp / WAHA sessions
+waha/
+*.pma
+sessions/
+.wwebjs_auth/
+.wwebjs_cache/
+
+# Database
+*.sqlite
+*.sqlite3
+*.db
+
+# OS generated files
+Thumbs.db
+Desktop.ini
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Test coverage
+coverage/
+.nyc_output/
+*.lcov
+
+# Cache
+.cache/
+.parcel-cache/
+.next/
+.nuxt/
+
+# Misc
+*.seed
+*.pid
+*.pid.lock
+.lock-wscript
