@@ -1,45 +1,15 @@
 FROM node:18-bullseye
 
-# Install dependencies sistem + Python 3.11 dari deadsnakes untuk Debian
+# Install sistem dependencies + Python3 dari repo Debian (jauh lebih cepat dari build source)
 RUN apt-get update && apt-get install -y \
+    python3 \
+    python3-pip \
+    python3-dev \
     wget \
     gnupg \
     curl \
     unzip \
     build-essential \
-    zlib1g-dev \
-    libncurses5-dev \
-    libgdbm-dev \
-    libnss3-dev \
-    libssl-dev \
-    libreadline-dev \
-    libffi-dev \
-    libsqlite3-dev \
-    libbz2-dev \
-    liblzma-dev \
-    && apt-get clean \
-    && rm -rf /var/lib/apt/lists/*
-
-# Build Python 3.11 dari source (cara paling reliable di Debian bullseye)
-RUN wget https://www.python.org/ftp/python/3.11.9/Python-3.11.9.tgz \
-    && tar -xzf Python-3.11.9.tgz \
-    && cd Python-3.11.9 \
-    && ./configure --enable-optimizations --with-ensurepip=install \
-    && make -j$(nproc) \
-    && make altinstall \
-    && cd / \
-    && rm -rf Python-3.11.9 Python-3.11.9.tgz
-
-# Set python3.11 sebagai default
-RUN update-alternatives --install /usr/bin/python3 python3 /usr/local/bin/python3.11 1 \
-    && update-alternatives --install /usr/bin/python python /usr/local/bin/python3.11 1 \
-    && update-alternatives --install /usr/bin/pip pip /usr/local/bin/pip3.11 1
-
-# Upgrade pip
-RUN pip install --upgrade pip setuptools wheel
-
-# Install Chrome dependencies
-RUN apt-get update && apt-get install -y \
     fonts-liberation \
     libasound2 \
     libatk-bridge2.0-0 \
@@ -69,22 +39,34 @@ RUN apt-get update && apt-get install -y \
     libxss1 \
     libxtst6 \
     xdg-utils \
-    && wget -q -O /tmp/chrome.deb https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb \
-    && apt-get install -y /tmp/chrome.deb \
+    && rm -rf /var/lib/apt/lists/*
+
+# Set python3 sebagai default
+RUN update-alternatives --install /usr/bin/python python /usr/bin/python3 1
+
+# Upgrade pip
+RUN pip3 install --upgrade pip setuptools wheel
+
+# Install Chrome
+RUN wget -q -O /tmp/chrome.deb https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb \
+    && apt-get update && apt-get install -y /tmp/chrome.deb \
     && rm /tmp/chrome.deb \
-    && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
+# Install Node dependencies dulu (cache layer)
 COPY package*.json ./
 RUN npm ci --only=production
 
+# Install Python dependencies
 COPY requirements.txt ./
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip3 install --no-cache-dir -r requirements.txt
 
+# Copy semua source code
 COPY . .
 
+# Buat temp directory
 RUN mkdir -p /app/temp && chmod 755 /app/temp
 
 EXPOSE 5000
@@ -93,5 +75,6 @@ ENV NODE_ENV=production
 ENV PORT=5000
 ENV CHROME_BIN=/usr/bin/google-chrome
 ENV PYTHONUNBUFFERED=1
+ENV PYTHONPATH=/app
 
 CMD ["node", "index.js"]
