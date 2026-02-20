@@ -1,4 +1,7 @@
 const mongoose = require('mongoose');
+const axios = require('axios');
+
+const API_BASE = process.env.INTERNAL_API_URL || 'http://localhost:5000';
 
 const merchantOrderSchema = new mongoose.Schema({
   merchant_order_id: { type: String, required: true, trim: true },
@@ -337,8 +340,6 @@ exports.assignWithBlitz = async (req, res) => {
       }
     );
 
-    const axios = require('axios');
-
     const forwardHeaders = {
       'Content-Type': 'application/json',
       ...(authorizationHeader ? { Authorization: authorizationHeader } : {})
@@ -349,7 +350,7 @@ exports.assignWithBlitz = async (req, res) => {
 
       try {
         const validateResponse = await axios.post(
-          'http://localhost:5000/api/blitz-proxy/validate-batch-orders',
+          `${API_BASE}/api/blitz-proxy/validate-batch-orders`,
           { sequenceType: 1, batchId: activeBatchId, merchantOrderIds, hubId: validationData.business_hub },
           { headers: forwardHeaders, timeout: 60000 }
         );
@@ -357,7 +358,7 @@ exports.assignWithBlitz = async (req, res) => {
         if (!validateResponse.data.result) throw new Error('Validation failed');
 
         const addResponse = await axios.post(
-          'http://localhost:5000/api/blitz-proxy/add-batch-orders',
+          `${API_BASE}/api/blitz-proxy/add-batch-orders`,
           { sequenceType: 1, batchId: activeBatchId, merchantOrderIds, hubId: validationData.business_hub },
           { headers: forwardHeaders, timeout: 60000 }
         );
@@ -389,7 +390,7 @@ exports.assignWithBlitz = async (req, res) => {
 
     try {
       const createBatchResponse = await axios.post(
-        'http://localhost:5000/api/blitz-proxy/create-batch-with-driver',
+        `${API_BASE}/api/blitz-proxy/create-batch-with-driver`,
         {
           orders: ordersToAssign,
           driverId,
