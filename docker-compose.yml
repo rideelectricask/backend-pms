@@ -1,0 +1,38 @@
+version: '3.8'
+
+services:
+  pms-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: pms-api-server
+    restart: unless-stopped
+    ports:
+      - "${PORT:-5000}:5000"
+    environment:
+      - NODE_ENV=production
+      - PORT=5000
+      - DATABASE_URI=${DATABASE_URI}
+      - LARK_APP_ID=${LARK_APP_ID}
+      - LARK_APP_SECRET=${LARK_APP_SECRET}
+    env_file:
+      - .env
+    volumes:
+      - ./temp:/app/temp
+      - ./logs:/app/logs
+    networks:
+      - pms-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/api/chart/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+networks:
+  pms-network:
+    driver: bridge
+
+volumes:
+  temp-data:
+  logs-data:
